@@ -9,7 +9,7 @@ mdl = Model(name='1D-CuttingStock')
 
 # Definindo os parâmetros
 
-Limit = 10 # Limite de barras a serem cortadas, limitação do solver
+Limit = 142 # Limite de barras a serem cortadas, limitação do solver
 
 L = 3000 # Tamanho padrão da barra
 
