@@ -1,34 +1,52 @@
-import sys
-import docplex.mp
-
 from docplex.mp.model import Model
 
-# Criando instância do modelo
-mdl = Model("1D-CuttingStock")
+#   O objetivo deste modelo é implementar o problema de corte de estoque 1D, onde um tamanho padrão de barra é definido
+# e a partir dele, são cortados pedaços de tamanhos diferentes, de forma a minimizar o desperdício de material. É também obtido um plano de corte.
+#
 
-#Definindo variáveis
+# Instanciando o modelo
+mdl = Model(name='1D-CuttingStock')
 
-n = 1  # Number of different lengths of pieces required
-m = 1  # Number of available stock lengths
-L = [100, 150]  # Length of each stock piece
-l = [30, 45, 50]  # Length of each required piece
-d = [4, 6, 3]  # Demand for pieces of each length
+# Definindo os parâmetros
 
+Limit = 10 # Limite de barras a serem cortadas, limitação do solver
 
-# Criando variáveis de decisão
-x = [[mdl.integer_var(name=f"x_{i}_{j}", lb=0) for j in range(n)] for i in range(m)]
+L = 3000 # Tamanho padrão da barra
 
-# Criando restrições
-# Restrição de demanda
-for j in range(n):
-    mdl.add_constraint(mdl.sum(x[i][j] for i in range(m)) >= d[j], f"Demand_{j}")
+a = [100, 200, 300, 400, 500] # Tamanhos dos pedaços a serem cortados
+b = [1, 2, 3, 4, 5] # Demanda de cada tamanho
 
-# Restrição de estoque
-for i in range(m):
-    mdl.add_constraint(mdl.sum(l[j] * x[i][j] for j in range(n)) <= L[i], f"Stock_{i}")
+n = len(a) # Número de tamanhos diferentes
 
-# Função objetivo
-mdl.minimize(mdl.sum(l[j] * x[i][j] for i in range(m) for j in range(n)))
+# Definindo as restrições
+
+# Definindo as variáveis de decisão 
+# y_j indicates whether stock piece j is used
+y = [mdl.binary_var(name=f"y_{j}") for j in range(Limit)]  # Assuming a maximum of 1000 stock pieces
+
+# x_ij indicates if a piece of type i is cut from stock piece j
+x = [[mdl.binary_var(name=f"x_{i}_{j}") for j in range(Limit)] for i in range(n)]
+
+# Constraints
+# Demand satisfaction: each piece type's demand must be met
+for i in range(n):
+    mdl.add_constraint(mdl.sum(x[i][j] for j in range(Limit)) == b[i], f"Demand_{i}")
+
+# Stock limitation: the total length of pieces cut from a stock piece must not exceed its length
+for j in range(Limit):
+    mdl.add_constraint(mdl.sum(a[i] * x[i][j] for i in range(n)) <= L * y[j], f"Stock_{j}")
+
+# Linking constraint: x_ij can be 1 only if y_j is 1
+for i in range(n):
+    for j in range(Limit):
+        mdl.add_constraint(x[i][j] <= y[j], f"Link_{i}_{j}")
+
+# Ordering constraint to use lower-indexed stock pieces first
+for j in range(1, Limit):
+    mdl.add_constraint(y[j-1] >= y[j], f"Order_{j}")
+
+# Objective function: Minimize the total number of stock pieces used
+mdl.minimize(mdl.sum(y[j] for j in range(Limit)))
 
 # Solve the model
 solution = mdl.solve(log_output=True)
@@ -36,8 +54,10 @@ solution = mdl.solve(log_output=True)
 # Print the solution
 if solution:
     print("Solution found:\n")
-    for i in range(m):
-        for j in range(n):
-            print(f"Number of pieces of length {l[j]} cut from stock {i}: {x[i][j].solution_value}")
+    print(f"Number of stock pieces needed: {solution.get_value(mdl.sum(y[j] for j in range(Limit)))}")
+    for i in range(n):
+        for j in range(Limit):
+            if x[i][j].solution_value > 0.5:
+                print(f"Cut piece of length {a[i]} from stock piece {j}")
 else:
     print("No solution found.")
